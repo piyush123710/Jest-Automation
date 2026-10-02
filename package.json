@@ -1,0 +1,56 @@
+{
+  "name": "salon-api-jest-automation",
+  "version": "1.0.0",
+  "description": "Jest-based API automation suite for Salon Booking Backend",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest --runInBand --detectOpenHandles",
+    "test:verbose": "jest --runInBand --detectOpenHandles --verbose",
+    "test:coverage": "jest --runInBand --detectOpenHandles --coverage",
+    "test:auth": "jest --runInBand --detectOpenHandles --testPathPattern=auth",
+    "test:booking": "jest --runInBand --detectOpenHandles --testPathPattern=booking",
+    "test:e2e": "jest --runInBand --detectOpenHandles --testPathPattern=e2e",
+    "test:salon": "jest --runInBand --detectOpenHandles --testPathPattern=salon"
+  },
+  "keywords": [
+    "jest",
+    "api",
+    "automation",
+    "testing",
+    "salon"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "axios": "^1.7.9",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.5",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.7.3"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testTimeout": 30000,
+    "testMatch": [
+      "**/tests/**/*.test.ts"
+    ],
+    "globals": {
+      "ts-jest": {
+        "tsconfig": "tsconfig.json"
+      }
+    },
+    "collectCoverageFrom": [
+      "tests/**/*.ts"
+    ],
+    "coverageReporters": [
+      "text",
+      "lcov",
+      "html"
+    ]
+  }
+}
