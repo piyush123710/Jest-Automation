@@ -1,5 +1,5 @@
 /**
- * In-Memory Mock Backend Server for Salon API
+ * In-Memory Mock Backend Server for Salon API (Node.js / JavaScript)
  *
  * Implements the exact business logic and error handling of the 5 Salon APIs:
  * 1. POST   /api/register
@@ -7,59 +7,37 @@
  * 3. GET    /api/salons/:salonId/available-slots
  * 4. POST   /api/bookings
  * 5. DELETE /api/bookings/:id
- *
- * Used automatically when USE_MOCK=true or when running in offline / CI environments.
  */
 
-import { AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+const users = new Map();
+const bookings = new Map();
 
-// ─── In-Memory Storage ────────────────────────────────────────────────────────
-
-interface UserRecord {
-  _id: string;
-  name: string;
-  email: string;
-  password: string;
-  role: 'customer' | 'stylist' | 'admin';
-}
-
-interface BookingRecord {
-  _id: string;
-  salonId: string;
-  stylistId: string;
-  customerId: string;
-  serviceId: string;
-  date: string;
-  startTime: string;
-  endTime: string;
-  status: 'booked' | 'cancelled' | 'completed';
-}
-
-const users = new Map<string, UserRecord>();
-const bookings = new Map<string, BookingRecord>();
-
-export const MOCK_SALON_ID = '000000000000000000000001';
-export const MOCK_STYLIST_ID = '000000000000000000000002';
-export const MOCK_SERVICE_ID = '000000000000000000000003';
+const MOCK_SALON_ID = '000000000000000000000001';
+const MOCK_STYLIST_ID = '000000000000000000000002';
+const MOCK_SERVICE_ID = '000000000000000000000003';
 
 let idCounter = 100;
-function generateId(): string {
+function generateId() {
   idCounter++;
   return idCounter.toString().padStart(24, '0');
 }
 
-function createJwt(userId: string, email: string): string {
+function createJwt(userId, email) {
   const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payload = Buffer.from(JSON.stringify({ id: userId, email, exp: Math.floor(Date.now() / 1000) + 3600 })).toString('base64url');
+  const payload = Buffer.from(
+    JSON.stringify({ id: userId, email, exp: Math.floor(Date.now() / 1000) + 3600 })
+  ).toString('base64url');
   const signature = 'mock_valid_signature_token';
   return `${header}.${payload}.${signature}`;
 }
 
-function verifyJwt(token: string): { id: string; email: string } | null {
+function verifyJwt(token) {
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
   if (parts.length !== 3) return null;
-  if (token.includes('invalid') || token.includes('garbage') || token.includes('INVALID_SIGNATURE')) return null;
+  if (token.includes('invalid') || token.includes('garbage') || token.includes('INVALID_SIGNATURE')) {
+    return null;
+  }
 
   try {
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
@@ -70,22 +48,19 @@ function verifyJwt(token: string): { id: string; email: string } | null {
   }
 }
 
-// ─── Mock Router ─────────────────────────────────────────────────────────────
-
-export async function handleMockRequest(config: InternalAxiosRequestConfig): Promise<AxiosResponse> {
+async function handleMockRequest(config) {
   const method = (config.method || 'get').toUpperCase();
   const url = config.url || '';
-  let body: any = {};
+  let body = {};
 
   if (config.data) {
     body = typeof config.data === 'string' ? JSON.parse(config.data) : config.data;
   }
 
-  const authHeader = config.headers?.Authorization as string | undefined;
+  const authHeader = config.headers?.Authorization;
   const token = authHeader ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
 
-  // Helper response builder
-  const makeResponse = (status: number, data: any): AxiosResponse => ({
+  const makeResponse = (status, data) => ({
     data,
     status,
     statusText: status >= 200 && status < 300 ? 'OK' : 'Error',
@@ -107,7 +82,7 @@ export async function handleMockRequest(config: InternalAxiosRequestConfig): Pro
     }
 
     const userId = generateId();
-    const newUser: UserRecord = { _id: userId, name, email: email.toLowerCase(), password, role: 'customer' };
+    const newUser = { _id: userId, name, email: email.toLowerCase(), password, role: 'customer' };
     users.set(email.toLowerCase(), newUser);
 
     const jwtToken = createJwt(userId, email);
@@ -196,7 +171,6 @@ export async function handleMockRequest(config: InternalAxiosRequestConfig): Pro
       return makeResponse(404, { error: 'Salon not found' });
     }
 
-    // Check duplicate booking for same stylist/slot/date
     for (const b of bookings.values()) {
       if (b.date === date && b.startTime === slotTime && b.stylistId === stylistId && b.status === 'booked') {
         return makeResponse(400, { error: 'Slot already booked' });
@@ -204,7 +178,7 @@ export async function handleMockRequest(config: InternalAxiosRequestConfig): Pro
     }
 
     const bookingId = generateId();
-    const newBooking: BookingRecord = {
+    const newBooking = {
       _id: bookingId,
       salonId,
       stylistId: stylistId || MOCK_STYLIST_ID,
@@ -262,6 +236,12 @@ export async function handleMockRequest(config: InternalAxiosRequestConfig): Pro
     });
   }
 
-  // Default fallback
   return makeResponse(404, { error: `Route ${method} ${url} not found` });
 }
+
+module.exports = {
+  handleMockRequest,
+  MOCK_SALON_ID,
+  MOCK_STYLIST_ID,
+  MOCK_SERVICE_ID,
+};

@@ -1,12 +1,17 @@
+/**
+ * ─────────────────────────────────────────────────────────────
+ *  AUTH — Login Tests (Node.js / JavaScript)
+ *  POST /api/login
+ * ─────────────────────────────────────────────────────────────
+ */
 
-import { registerUser, loginUser, uniqueEmail } from '../utils/testHelpers';
+const { registerUser, loginUser, uniqueEmail } = require('../utils/testHelpers');
 
 const VALID_PASSWORD = 'SecurePass@123';
 
 describe('POST /api/login — User Login', () => {
-  let registeredEmail: string;
+  let registeredEmail;
 
-  /** Register a fresh user once for the entire describe block */
   beforeAll(async () => {
     registeredEmail = uniqueEmail('logintest');
     const res = await registerUser({
@@ -17,12 +22,10 @@ describe('POST /api/login — User Login', () => {
 
     if (res.status !== 201) {
       throw new Error(
-        `Setup failed — could not register user [${res.status}]: ${JSON.stringify(res.data)}`,
+        `Setup failed — could not register user [${res.status}]: ${JSON.stringify(res.data)}`
       );
     }
   });
-
-  // ─── Positive ────────────────────────────────────────────────
 
   describe('Positive scenarios', () => {
     it('should return 200 with a JWT token for valid credentials', async () => {
@@ -43,7 +46,7 @@ describe('POST /api/login — User Login', () => {
         password: VALID_PASSWORD,
       });
 
-      const token: string = res.data?.token ?? res.data?.data?.token ?? '';
+      const token = res.data?.token ?? res.data?.data?.token ?? '';
       const parts = token.split('.');
       expect(parts).toHaveLength(3);
     });
@@ -54,13 +57,10 @@ describe('POST /api/login — User Login', () => {
         password: VALID_PASSWORD,
       });
 
-      // Response body should never leak password hash
       const bodyStr = JSON.stringify(res.data);
       expect(bodyStr).not.toMatch(/password/i);
     });
   });
-
-  // ─── Negative ────────────────────────────────────────────────
 
   describe('Negative scenarios', () => {
     it('should return 4xx for wrong password', async () => {
@@ -102,18 +102,16 @@ describe('POST /api/login — User Login', () => {
     });
 
     it('should return 400 for an empty body', async () => {
-      const res = await loginUser({} as any);
-
+      const res = await loginUser({});
       expect(res.status).toBe(400);
     });
 
     it('should return 4xx for NoSQL injection attempt in email', async () => {
       const res = await loginUser({
-        email: { $gt: '' } as any,
+        email: { $gt: '' },
         password: VALID_PASSWORD,
       });
 
-      // Server must NOT return 200 for injection attempts
       expect(res.status).not.toBe(200);
     });
   });
