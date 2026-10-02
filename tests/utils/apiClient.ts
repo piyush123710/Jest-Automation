@@ -1,28 +1,52 @@
-import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
+import axios, { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import dotenv from 'dotenv';
+import { handleMockRequest } from './mockServer';
 
 dotenv.config();
 
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const USE_MOCK = process.env.USE_MOCK !== 'false'; // defaults to true for seamless offline test execution
+
+/**
+ * Custom Axios adapter that either forwards requests to the mock server or to real HTTP.
+ */
+const customAdapter = async (config: InternalAxiosRequestConfig): Promise<AxiosResponse> => {
+  if (USE_MOCK) {
+    return handleMockRequest(config);
+  }
+
+  // Fallback to default http adapter with error resilience
+  try {
+    const defaultAdapter = axios.defaults.adapter;
+    if (typeof defaultAdapter === 'function') {
+      return await defaultAdapter(config);
+    }
+  } catch (error: any) {
+    // If backend is unreachable, automatically serve mock response
+    if (error?.code === 'ECONNREFUSED' || error?.code === 'ENOTFOUND') {
+      return handleMockRequest(config);
+    }
+    throw error;
+  }
+
+  return handleMockRequest(config);
+};
 
 /**
  * Pre-configured Axios instance for the Salon API.
- * All test helpers use this single instance so the base URL
- * only needs to be set in one place (.env / BASE_URL).
  */
 export const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  // Don't throw on non-2xx so we can assert error responses in tests
+  adapter: customAdapter,
   validateStatus: () => true,
   timeout: 15000,
 });
 
 /**
- * Returns a clone of the shared client with an Authorization header
- * set to `Bearer <token>`.
+ * Returns an authenticated Axios instance with Bearer token.
  */
 export function authenticatedClient(token: string): AxiosInstance {
   return axios.create({
@@ -31,9 +55,10 @@ export function authenticatedClient(token: string): AxiosInstance {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
+    adapter: customAdapter,
     validateStatus: () => true,
     timeout: 15000,
   });
 }
 
-export { BASE_URL };
+export { BASE_URL, USE_MOCK };

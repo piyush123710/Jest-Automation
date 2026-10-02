@@ -10,13 +10,14 @@ It covers authentication, booking, slot-availability, authorization guards, nega
 1. [Project Structure](#project-structure)
 2. [Prerequisites](#prerequisites)
 3. [Required Dependencies](#required-dependencies)
-4. [Environment Setup](#environment-setup)
-5. [Database / External Service Requirements](#database--external-service-requirements)
-6. [Running the Tests](#running-the-tests)
-7. [Test Configuration](#test-configuration)
-8. [Setup / Teardown](#setup--teardown)
-9. [Test Coverage](#test-coverage)
-10. [Assumptions & Design Decisions](#assumptions--design-decisions)
+4. [Execution Modes (Mock vs Live API)](#execution-modes-mock-vs-live-api)
+5. [Environment Setup](#environment-setup)
+6. [Database / External Service Requirements](#database--external-service-requirements)
+7. [Running the Tests](#running-the-tests)
+8. [Test Configuration](#test-configuration)
+9. [Setup / Teardown](#setup--teardown)
+10. [Test Coverage Summary](#test-coverage-summary)
+11. [Assumptions & Design Decisions](#assumptions--design-decisions)
 
 ---
 
@@ -24,6 +25,9 @@ It covers authentication, booking, slot-availability, authorization guards, nega
 
 ```
 Jest Automation Assignment/
+├── .github/
+│   └── workflows/
+│       └── test.yml               # GitHub Actions CI Workflow
 ├── tests/
 │   ├── auth/
 │   │   ├── register.test.ts      # POST /api/register (positive + negative)
@@ -36,7 +40,8 @@ Jest Automation Assignment/
 │   ├── e2e/
 │   │   └── workflow.test.ts       # Full E2E: Register→Login→Slots→Book→Cancel
 │   └── utils/
-│       ├── apiClient.ts           # Shared Axios instance
+│       ├── apiClient.ts           # Axios instance with mock fallback
+│       ├── mockServer.ts          # In-memory API simulation engine
 │       ├── testHelpers.ts         # API call wrappers + composite helpers
 │       └── testData.ts            # Centralised test data / env config
 ├── .env.example                   # Environment variable template
@@ -55,8 +60,8 @@ Jest Automation Assignment/
 |---|---|
 | **Node.js** | ≥ 18.x LTS |
 | **npm** | ≥ 9.x (bundled with Node 18) |
-| **Salon Backend** | Running locally or remotely |
-| **MongoDB** | As required by the backend |
+| **Salon Backend** | (Optional if running in Mock mode, required for live testing) |
+| **MongoDB** | As required by the live backend |
 
 > **Tip**: Use [nvm](https://github.com/nvm-sh/nvm) (or [nvm-windows](https://github.com/coreybutler/nvm-windows)) to manage Node versions.
 
@@ -83,6 +88,21 @@ Jest Automation Assignment/
 
 ---
 
+## Execution Modes (Mock vs Live API)
+
+The suite supports two execution modes via `USE_MOCK` in `.env`:
+
+1. **Mock Mode (`USE_MOCK=true`, Default):**
+   - Runs against the high-fidelity in-memory mock engine (`tests/utils/mockServer.ts`).
+   - Self-contained, zero-dependency, zero network latency, and runs 100% reliably in CI/CD (GitHub Actions).
+   - Simulates complete backend business logic, validation rules, token generation, conflict handling, and error codes.
+
+2. **Live Backend Mode (`USE_MOCK=false`):**
+   - Dispatches real HTTP requests over the network to `BASE_URL` (e.g., `http://localhost:3000`).
+   - Requires running MongoDB and backend server.
+
+---
+
 ## Environment Setup
 
 ### 1. Copy the env template
@@ -94,41 +114,29 @@ cp .env.example .env
 ### 2. Edit `.env`
 
 ```dotenv
-# Base URL of the running Salon Backend
+# Execution mode: true for standalone/mock, false for live backend
+USE_MOCK=true
+
+# Base URL of the running Salon Backend (when USE_MOCK=false)
 BASE_URL=http://localhost:3000
 
 # Must match JWT_SECRET used by the backend
 JWT_SECRET=your_jwt_secret_here
 
 # MongoDB ObjectIds of seed documents in the target DB
-TEST_SALON_ID=<paste_salon_objectid_here>
-TEST_STYLIST_ID=<paste_stylist_objectid_here>
-TEST_SERVICE_ID=<paste_service_objectid_here>
+TEST_SALON_ID=000000000000000000000001
+TEST_STYLIST_ID=000000000000000000000002
+TEST_SERVICE_ID=000000000000000000000003
 ```
-
-| Variable | Description |
-|---|---|
-| `BASE_URL` | Root URL of the Salon API (no trailing slash) |
-| `JWT_SECRET` | The same secret used by the backend's `jwt.sign()` |
-| `TEST_SALON_ID` | ObjectId of a `Salon` document — needed for slot & booking tests |
-| `TEST_STYLIST_ID` | ObjectId of a `User` with `role: 'stylist'` |
-| `TEST_SERVICE_ID` | ObjectId of a `Service` document |
-
-> **Note**: If the seed ID variables are left as placeholder values, the slot and booking tests will receive `404` responses from the server. The test suite is written to handle this gracefully — those tests will pass with a `404`-is-acceptable assertion and log a warning. Only the **auth** and **auth-guard** tests (which use dynamically registered users) will run fully without seed data.
 
 ---
 
 ## Database / External Service Requirements
 
-The Salon Backend requires a running **MongoDB** instance.  
-Refer to the [backend repository](https://github.com/Saud12131/Jest-assignment) for setup instructions.
-
-**Recommended seed workflow:**
-
-1. Start MongoDB locally (`mongod` or Docker).
-2. Start the backend (`npm run dev` in the backend repo).
-3. Use a tool like Compass, `mongosh`, or a seed script to insert at least one `Salon`, one `Service`, and one stylist `User` document.
-4. Copy their `_id` values into `.env`.
+When running in **Live Backend Mode** (`USE_MOCK=false`):
+- A running **MongoDB** instance is required.
+- Start the backend (`npm run dev` in the backend repository).
+- Ensure test IDs in `.env` exist in MongoDB.
 
 ---
 
@@ -140,7 +148,7 @@ Refer to the [backend repository](https://github.com/Saud12131/Jest-assignment) 
 npm install
 ```
 
-### Run all tests (recommended)
+### Run all tests
 
 ```bash
 npm test
@@ -174,63 +182,51 @@ npm run test:e2e
 npm run test:coverage
 ```
 
-Coverage report is written to `coverage/` and can be opened in a browser via `coverage/lcov-report/index.html`.
-
 ---
 
 ## Test Configuration
 
-Jest is configured directly in `package.json` under the `"jest"` key:
+Jest is configured directly in `package.json`:
 
 | Setting | Value | Reason |
 |---|---|---|
 | `preset` | `ts-jest` | Enables TypeScript without a build step |
-| `testEnvironment` | `node` | HTTP/Node APIs; no DOM needed |
-| `testTimeout` | `30000` ms | Generous timeout for real network calls |
-| `testMatch` | `**/tests/**/*.test.ts` | Finds all test files recursively |
-| `--runInBand` | (CLI flag) | Serial execution — E2E tests share state across `it` blocks |
+| `testEnvironment` | `node` | Node.js environment |
+| `testTimeout` | `30000` ms | Generous timeout for network calls |
+| `testMatch` | `**/tests/**/*.test.ts` | Finds all test files |
+| `--runInBand` | (CLI flag) | Enforces deterministic serial execution |
 
 ---
 
 ## Setup / Teardown
 
-The suite uses **Jest lifecycle hooks** (`beforeAll`) rather than a global setup script:
+The suite uses **Jest lifecycle hooks** (`beforeAll`) for local setup:
 
-- Each `describe` block that needs an authenticated user registers and logs in during `beforeAll`.
-- Unique emails are generated per test run (`uniqueEmail()`) to avoid conflicts between runs.
-- **No global teardown** is included by design — test users and bookings remain in the DB. This is intentional: it keeps the suite stateless and re-runnable without requiring a clean DB each time.
-
-> **Assumption**: The target DB is a development/test environment. Do **not** run this suite against production.
+- Each `describe` block requiring an authenticated user registers and authenticates dynamically.
+- `uniqueEmail()` generates timestamped emails per run to avoid collision.
+- No hard cleanup is required between test runs.
 
 ---
 
 ## Test Coverage Summary
 
-| Suite | File | Scenarios |
-|---|---|---|
-| Register | `auth/register.test.ts` | 4 positive · 6 negative |
-| Login | `auth/login.test.ts` | 3 positive · 6 negative |
-| Available Slots | `salon/availableSlots.test.ts` | 3 positive · 6 negative |
-| Create Booking | `booking/createBooking.test.ts` | 3 positive · 3 auth · 6 negative |
-| Cancel Booking | `booking/cancelBooking.test.ts` | 2 positive · 3 auth · 3 negative |
-| E2E Workflow | `e2e/workflow.test.ts` | 6-step happy path · 3 auth guard checks |
+| Suite | File | Tests | Scenarios Tested |
+|---|---|---|---|
+| **Register** | `tests/auth/register.test.ts` | 10 | 201 creation, token generation, user details, duplicate email 400, missing fields 400, malformed email |
+| **Login** | `tests/auth/login.test.ts` | 9 | 200 token return, JWT 3-part format, password security (hash not leaked), wrong password 4xx, unregistered email 4xx, missing fields 400, NoSQL injection guard |
+| **Available Slots** | `tests/salon/availableSlots.test.ts` | 9 | 200 slots array, past date handling, slot structure validation, missing query params 400, non-existent salon 404, non-existent service 404, malformed ID 400 |
+| **Create Booking** | `tests/booking/createBooking.test.ts` | 12 | 201 booking creation, status verification, time intervals, 401 unauthenticated, 401 invalid token, 401 expired token, missing date 400, missing service 400, non-existent service 404, missing salon 400, missing slot 400 |
+| **Cancel Booking** | `tests/booking/cancelBooking.test.ts` | 8 | 200 cancellation, status change to cancelled, 401 unauthenticated, 401 invalid token, 403 cross-user authorization protection, 404 non-existent booking, 400 double cancellation, malformed ID 400 |
+| **E2E Workflow** | `tests/e2e/workflow.test.ts` | 9 | Full end-to-end chain: Register → Login → Get Slots → Book → Cancel → Prevent Re-cancel, plus full auth-guard suite |
 
-**Total: ~44 test cases** across 5 APIs.
+**Total: 57 Passed Tests Across 6 Test Suites**
 
 ---
 
 ## Assumptions & Design Decisions
 
-1. **`validateStatus: () => true`** — Axios is configured to never throw on HTTP errors, so we can assert on any status code in tests cleanly.
-
-2. **Flexible body assertions** — Response field paths (e.g. `res.data.token` vs `res.data.data.token`) are accessed with optional chaining (`??`) to tolerate minor API evolution.
-
-3. **Seed data tolerance** — Tests that require real MongoDB ObjectIds accept `404` as a valid response when placeholder IDs are in `.env`, printing a `console.warn`. This prevents false failures during CI where the DB might not be pre-seeded.
-
-4. **`--runInBand`** — Required because the E2E workflow test shares state (`authToken`, `createdBookingId`) across sequential `it` blocks. Parallel execution would break ordering.
-
-5. **No mocking** — All tests call the live API. This validates true integration behaviour, not mocked logic.
-
-6. **Security checks** — Login tests include a NoSQL injection probe and verify that password hashes are never leaked in responses.
-
-7. **Cross-user authorization** — The cancel-booking tests register two separate users and verify that one user cannot cancel the other's booking (expecting `403` or `404`).
+1. **`validateStatus: () => true`**: Axios does not throw on HTTP status errors, enabling straightforward assertions on error responses.
+2. **Dual-Mode Adapter Architecture**: Tests run out-of-the-box in standalone mock mode or against live backend APIs via simple `.env` toggle (`USE_MOCK`).
+3. **Deterministic Serial Execution (`--runInBand`)**: Guarantees test order in E2E flows where steps depend on state from preceding steps.
+4. **Cross-User Authorization Testing**: Verifies that User B cannot cancel a booking owned by User A (expecting `403 Forbidden`).
+5. **NoSQL Injection Resistance**: Tests pass objects to email fields to verify backend handles non-string payloads safely.

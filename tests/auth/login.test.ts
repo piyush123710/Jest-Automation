@@ -1,22 +1,3 @@
-/**
- * ─────────────────────────────────────────────────────────────
- *  AUTH — Login Tests
- *  POST /api/login
- * ─────────────────────────────────────────────────────────────
- *
- *  Positive:
- *    ✓ Login with correct credentials → 200 + JWT token
- *    ✓ Token is a valid non-empty string
- *
- *  Negative / Edge-cases:
- *    ✗ Wrong password → 401 / 400
- *    ✗ Unregistered email → 401 / 404
- *    ✗ Missing email field → 400
- *    ✗ Missing password field → 400
- *    ✗ Empty body → 400
- *    ✗ SQL/NoSQL injection attempt in email field
- * ─────────────────────────────────────────────────────────────
- */
 
 import { registerUser, loginUser, uniqueEmail } from '../utils/testHelpers';
 
